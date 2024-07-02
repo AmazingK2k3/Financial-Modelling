@@ -13,6 +13,7 @@ import matplotlib.dates as mdates
 
 # Sidebar
 st.sidebar.title("Choose the stock parameters:")
+st.sidebar.write('Choose the start and end date for the stock prices to yield data. Closing Price of stock in end date will be used for option pricing.')
 start_date = st.sidebar.date_input("Start date", date(2024, 1, 1))
 end_date = st.sidebar.date_input("End date", date(2024, 1, 31))
 st.sidebar.write("Choose the Ticker in NSE:")
@@ -31,14 +32,10 @@ expiration_date = st.sidebar.date_input("Expiration Date", date(2024, 7, 1))
 option_type = st.sidebar.radio("Option Type", ["Call", "Put"])
 option_type = ql.Option.Call if option_type == "Call" else ql.Option.Put
 
-# Fetch the stock prices using yfinance
-stock_data = yf.download(ticker, start=start_date, end=end_date)
-stock_data['Returns'] = stock_data['Close'].pct_change()
-stock_data['Returns'] = stock_data['Returns'].fillna(0)
-closing_price = stock_data['Close'][-1]
-stock_prices = closing_price
 
-# Main content
+
+
+#------------------------ Main content ---------------------------------------------------
 st.markdown('''
 # Option Pricing and Greeks Calculator using Black-Scholes Model
 Below is the details of the Stock you chose! Choose the option parameters to yield the option prices and Greeks.
@@ -48,59 +45,67 @@ Below is the details of the Stock you chose! Choose the option parameters to yie
 - Built in `Python` using `streamlit`,`yfinance`, `matplotlib`, `pandas` and `datetime`
 ''')
 st.write('---')
-# Getting info from yfinance
+# Getting info from yfinance 
 tickerData = yf.Ticker(ticker) # Get ticker data
+# Get the historical prices for this ticker period determined by the user
 tickerDf = tickerData.history(period='1d', start=start_date, end=end_date) 
 
 # Ticker information - Extracting the name of the stock.
 string_name = tickerData.info['longName']
 st.header('**%s**' % string_name)
 
-# Extract the dates and closing prices from the stock_data DataFrame
-dates = stock_data.index
-closing_prices = stock_data['Close']
+def ticker_info(tickerData, tickerdf):
+    string_summary = tickerData.info['longBusinessSummary']
+    st.write("***About the Company***")
+    st.write(string_summary)
 
-# Creating the Plotly figure
-fig = px.line(stock_data, x=stock_data.index, y='Close', 
-              title='Stock Price Chart',
-              labels={'Close': 'Price', 'index': 'Date'},
-              template='plotly_white')
+    # Ticker data
+    st.header('**Ticker data**')
+    st.write(tickerDf)
 
-# Customize the layout
-fig.update_layout(
-    xaxis_title='Date',
-    yaxis_title='Price',
-    hovermode='x unified',
-    legend_title_text='',
-    xaxis_rangeslider_visible=True
-)
+def fetch_data(ticker, start_date, end_date):
+    stock_data = yf.download(ticker, start=start_date, end=end_date)
+    stock_data['Returns'] = stock_data['Close'].pct_change()
+    stock_data['Returns'] = stock_data['Returns'].fillna(0)
+    closing_price = stock_data['Close'][-1]
+    return stock_data, closing_price
 
-# Add range selector
-fig.update_xaxes(
-    rangeslider_visible=True,
-    rangeselector=dict(
-        buttons=list([
-            dict(count=1, label="1m", step="month", stepmode="backward"),
-            dict(count=6, label="6m", step="month", stepmode="backward"),
-            dict(count=1, label="YTD", step="year", stepmode="todate"),
-            dict(count=1, label="1y", step="year", stepmode="backward"),
-            dict(step="all")
-        ])
+def create_stock_diagram(stock_data):
+    # Extract the dates and closing prices from the stock_data DataFrame
+    dates = stock_data.index
+    closing_prices = stock_data['Close']
+
+    # Creating the Plotly figure
+    fig = px.line(stock_data, x=stock_data.index, y='Close', 
+                title='Stock Price Chart',
+                labels={'Close': 'Price', 'index': 'Date'},
+                template='plotly_white')
+
+    # Customize the layout
+    fig.update_layout(
+        xaxis_title='Date',
+        yaxis_title='Price',
+        hovermode='x unified',
+        legend_title_text='',
+        xaxis_rangeslider_visible=True
     )
-)
 
-# Display the plot
-st.plotly_chart(fig, use_container_width=True)
+    # Add range selector
+    fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=list([
+                dict(count=1, label="1m", step="month", stepmode="backward"),
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="YTD", step="year", stepmode="todate"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(step="all")
+            ])
+        )
+    )
 
-
-
-string_summary = tickerData.info['longBusinessSummary']
-st.write("***About the Company***")
-st.write(string_summary)
-
-# Ticker data
-st.header('**Ticker data**')
-st.write(tickerDf)
+    # Display the plot
+    st.plotly_chart(fig, use_container_width=True)
 
 def handle_error(func):
     def wrapper(*args, **kwargs):
@@ -111,13 +116,26 @@ def handle_error(func):
             return None
     return wrapper
 
-def validate_inputs(strike_price, risk_free_rate, sigma):
+def validate_inputs(start_date, end_date, ticker, strike_price, risk_free_rate):
+    if start_date >= end_date:
+        st.warning("End date must be after start date.")
+        return False
+    # only choose days when the market is open
+    if start_date.weekday() > 4 or end_date.weekday() > 4:
+        st.warning("Please choose a weekday.")
+        return False
+    if ticker == "":
+        st.warning("Please enter a valid stock ticker.")
+        return False
     if strike_price <= 0:
         st.warning("Strike price must be positive.")
         return False
     if risk_free_rate < 0 or risk_free_rate > 1:
         st.warning("Risk-free rate should be between 0 and 1.")
         return False
+    return True
+
+def validate_sigma(sigma):
     if sigma <= 0 or sigma > 2:
         st.warning("Volatility should be positive and typically less than 2.")
         return False
@@ -203,15 +221,21 @@ def calculate_option_prices_and_greeks(S, K, T, r, sigma, option_type):
     
     return call_price, delta, gamma, vega, theta
 
-S = stock_data['Close'][-1]
-sigma = compute_historical_volatility(stock_data)
+
 T = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
-if validate_inputs(strike_price, risk_free_rate, sigma):
-    call_price, call_delta, call_gamma, call_vega, call_theta = calculate_option_prices_and_greeks(S, strike_price, T, risk_free_rate, sigma, option_type)
+if validate_inputs(start_date, end_date, ticker, strike_price, risk_free_rate):
+    stock_data, closing_price = fetch_data(ticker, start_date, end_date)
+    create_stock_diagram(stock_data)
+    ticker_info(tickerData, tickerDf)
+    S = stock_data['Close'][-1]
+    sigma = compute_historical_volatility(stock_data)
+    if validate_sigma(sigma):
+        call_price, call_delta, call_gamma, call_vega, call_theta = calculate_option_prices_and_greeks(S, strike_price, T, risk_free_rate, sigma, option_type)
 
     if call_price is not None:
         #Display in a neat streamlit Coloumn table format
         st.subheader("Option Prices and Greeks")
+        option_type = "Call" if option_type == ql.Option.Call else "Put"
         option_data = {
             "Option Type": [option_type],
             "Strike Price": [strike_price],
