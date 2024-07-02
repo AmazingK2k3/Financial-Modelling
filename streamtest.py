@@ -42,7 +42,7 @@ Below is the details of the Stock you chose! Choose the option parameters to yie
             
 **Credits**
 - App built by Kaushik Srivatsan
-- Built in `Python` using `streamlit`,`yfinance`, `matplotlib`, `pandas` and `datetime`
+- Built in `Python` using `streamlit`,`yfinance`, `matplotlib`, `pandas`, `plotly` and `datetime`
 ''')
 st.write('---')
 # Getting info from yfinance 
