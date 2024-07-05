@@ -225,7 +225,7 @@ def calculate_option_prices_and_greeks(S, K, valuation_date, expiration_date, r,
     theta = option.theta()
     
     return call_price, delta, gamma, vega, theta
-
+    
 #set evaluation date as end date
 valuation_date = ql.Date(end_date.day, end_date.month, end_date.year)
 expiration_date = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
