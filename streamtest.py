@@ -193,15 +193,20 @@ def create_option_payoff_diagram(S, K, option_price, option_type):
 
 # Call option prices and Greeks
 @handle_error
-def calculate_option_prices_and_greeks(S, K, T, r, sigma, option_type):
+def calculate_option_prices_and_greeks(S, K, valuation_date, expiration_date, r, sigma, option_type):
     # Option parameters
     payoff = ql.PlainVanillaPayoff(option_type, K)
-    exercise = ql.EuropeanExercise(T)
+    exercise = ql.EuropeanExercise(expiration_date)
+
+    # Calculate time to maturity
+    day_count = ql.Actual360()
+    calendar = ql.TARGET()
+    T = day_count.yearFraction(valuation_date, expiration_date)
     
     # Market data
     spot_handle = ql.QuoteHandle(ql.SimpleQuote(S))
-    flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(0, ql.NullCalendar(), ql.QuoteHandle(ql.SimpleQuote(r)), ql.Actual360()))
-    vol_handle = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(0, ql.NullCalendar(), ql.QuoteHandle(ql.SimpleQuote(sigma)), ql.Actual360()))
+    flat_ts = ql.YieldTermStructureHandle(ql.FlatForward(valuation_date, r, day_count))
+    vol_handle = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(valuation_date, calendar, sigma, day_count))
     
     # Black-Scholes process
     bsm_process = ql.BlackScholesMertonProcess(spot_handle, flat_ts, flat_ts, vol_handle)
@@ -221,8 +226,11 @@ def calculate_option_prices_and_greeks(S, K, T, r, sigma, option_type):
     
     return call_price, delta, gamma, vega, theta
 
+#set evaluation date as end date
+valuation_date = ql.Date(end_date.day, end_date.month, end_date.year)
+expiration_date = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
 
-T = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
+ql.Settings.instance().evaluationDate = valuation_date
 if validate_inputs(start_date, end_date, ticker, strike_price, risk_free_rate):
     stock_data, closing_price = fetch_data(ticker, start_date, end_date)
     create_stock_diagram(stock_data)
@@ -230,7 +238,7 @@ if validate_inputs(start_date, end_date, ticker, strike_price, risk_free_rate):
     S = stock_data['Close'][-1]
     sigma = compute_historical_volatility(stock_data)
     if validate_sigma(sigma):
-        call_price, call_delta, call_gamma, call_vega, call_theta = calculate_option_prices_and_greeks(S, strike_price, T, risk_free_rate, sigma, option_type)
+        call_price, call_delta, call_gamma, call_vega, call_theta = calculate_option_prices_and_greeks(S, strike_price, valuation_date, expiration_date, risk_free_rate, sigma, option_type)
 
     if call_price is not None:
         #Display in a neat streamlit Coloumn table format
